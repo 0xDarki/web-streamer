@@ -9,6 +9,7 @@ RUN apt-get update --fix-missing || apt-get update && \
     xvfb \
     xterm \
     x11-utils \
+    xdotool \
     ffmpeg \
     pulseaudio \
     socat \

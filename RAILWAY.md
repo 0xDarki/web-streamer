@@ -47,6 +47,9 @@ This guide will help you deploy the Web Streamer to Railway using Docker.
      - No quotes needed here either
    - `RESOLUTION`: Video resolution (default: `1920x1080`)
    - `FRAMERATE`: Frames per second (default: `10`)
+   - `PLAY_BUTTON_COORDS`: X,Y coordinates of play button to click (format: `960,540`)
+     - Use this if your page requires clicking a play button to start audio
+   - `PLAY_BUTTON_DELAY`: Seconds to wait before clicking play button (default: `5`)
 
 3. Click **"Deploy"** to trigger a new deployment
 

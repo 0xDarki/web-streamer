@@ -32,6 +32,9 @@ docker run -d --rm \
 - **`TARGET_URL`** : URL of the web page to stream (default: `https://www.google.com`)
 - **`RESOLUTION`** : Video capture resolution (default: `1920x1080`)
 - **`FRAMERATE`** : Frames per second (default: `10`)
+- **`PLAY_BUTTON_COORDS`** : X,Y coordinates of the play button to click (format: `"x,y"`, e.g., `"960,540"`)
+- **`PLAY_BUTTON_SELECTOR`** : CSS selector of the play button (less reliable, prefer coordinates)
+- **`PLAY_BUTTON_DELAY`** : Delay in seconds before clicking the play button (default: `5`)
 
 ## 📖 Usage Examples
 
@@ -59,7 +62,20 @@ docker run -d --rm \
   web-streamer
 ```
 
-### Example 3: Stream in interactive mode (for debugging)
+### Example 3: Stream with automatic play button click
+
+```bash
+docker run -d --rm \
+  --name stream-with-audio \
+  --shm-size=2gb \
+  -e TARGET_URL="https://example.com" \
+  -e RTMP_URL="rtmps://your-server.com/stream/key" \
+  -e PLAY_BUTTON_COORDS="960,540" \
+  -e PLAY_BUTTON_DELAY="5" \
+  web-streamer
+```
+
+### Example 4: Stream in interactive mode (for debugging)
 
 ```bash
 docker run -it --rm \
@@ -136,6 +152,86 @@ See [RAILWAY.md](./RAILWAY.md) for complete Railway deployment instructions.
 - **Framerate**: Default framerate is 10 fps to save bandwidth
 - **Audio**: Audio is captured if available, otherwise the stream will be video only
 - **RTMP_URL**: Must be a valid and complete RTMP or RTMPS URL
+- **Play Button**: To automatically click a play button on your page, use `PLAY_BUTTON_COORDS` with the X,Y coordinates (e.g., `"960,540"` for center of 1920x1080 screen)
+
+## 🎵 Auto-Click Play Button
+
+If your web page requires clicking a play button to start audio/music, you can configure automatic clicking.
+
+### Finding Button Coordinates
+
+**Quick Method:**
+
+1. Open your page in a browser
+2. Press **F12** to open developer tools
+3. Click the **"Select element"** icon (cursor icon) or press **Ctrl+Shift+C** / **Cmd+Shift+C**
+4. Click on the play button
+5. In the **Console** tab, run this script:
+
+```javascript
+// Automatic play button finder
+function findPlayButton() {
+  const selectors = [
+    'button[aria-label*="play" i]',
+    'button.play',
+    '.play-button',
+    'button[class*="play" i]'
+  ];
+  
+  let button = null;
+  for (const selector of selectors) {
+    button = document.querySelector(selector);
+    if (button) break;
+  }
+  
+  if (!button) {
+    console.log('Button not found automatically. Finding all buttons...');
+    document.querySelectorAll('button').forEach((btn, i) => {
+      const rect = btn.getBoundingClientRect();
+      console.log(`Button ${i+1}:`, {
+        text: btn.textContent.trim().substring(0, 30),
+        coords: `${Math.round(rect.left + rect.width/2)},${Math.round(rect.top + rect.height/2)}`
+      });
+    });
+    return;
+  }
+  
+  const rect = button.getBoundingClientRect();
+  const x = Math.round(rect.left + rect.width / 2);
+  const y = Math.round(rect.top + rect.height / 2);
+  
+  console.log(`✅ Coordinates: ${x},${y}`);
+  console.log(`📋 Use: PLAY_BUTTON_COORDS="${x},${y}"`);
+  
+  button.style.outline = '3px solid red';
+}
+
+findPlayButton();
+```
+
+6. Use the coordinates shown in `PLAY_BUTTON_COORDS` (format: `"x,y"`)
+
+**📖 For detailed instructions, see [FIND_COORDINATES.md](./FIND_COORDINATES.md)**
+
+### Example
+
+```bash
+docker run -d --rm \
+  --name stream \
+  --shm-size=2gb \
+  -e TARGET_URL="https://example.com" \
+  -e RTMP_URL="rtmps://your-server.com/stream/key" \
+  -e PLAY_BUTTON_COORDS="960,540" \
+  -e PLAY_BUTTON_DELAY="5" \
+  web-streamer
+```
+
+The container will:
+1. Load the page
+2. Wait 5 seconds (configurable with `PLAY_BUTTON_DELAY`)
+3. Click at coordinates (960, 540)
+4. Wait 3 seconds for audio to start
+5. Begin streaming
 
 ## 🐛 Troubleshooting
 

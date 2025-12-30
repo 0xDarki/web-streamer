@@ -15,6 +15,12 @@ FRAMERATE="10"
 TARGET_URL="${TARGET_URL:-https://www.google.com}"
 # URL RTMPS (ex: rtmps://live-api-s.facebook.com:443/rtmp/CLE_STREAM)
 RTMP_URL="${RTMP_URL}"
+# Sélecteur CSS ou XPath du bouton play (optionnel)
+PLAY_BUTTON_SELECTOR="${PLAY_BUTTON_SELECTOR:-}"
+# Coordonnées X,Y du bouton play (optionnel, format: "x,y")
+PLAY_BUTTON_COORDS="${PLAY_BUTTON_COORDS:-}"
+# Délai avant de cliquer sur le bouton play (en secondes)
+PLAY_BUTTON_DELAY="${PLAY_BUTTON_DELAY:-5}"
 
 # Variables d'environnement pour Chromium
 export DISPLAY=:99
@@ -146,7 +152,82 @@ if ! check_firefox; then
   exit 1
 fi
 
-log "Firefox est actif, démarrage du stream..."
+log "Firefox est actif"
+
+# Fonction pour cliquer sur le bouton play
+click_play_button() {
+  if [ -n "$PLAY_BUTTON_COORDS" ]; then
+    # Utiliser les coordonnées directement avec xdotool (méthode la plus fiable)
+    log "Clic sur le bouton play aux coordonnées: $PLAY_BUTTON_COORDS"
+    IFS=',' read -r X Y <<< "$PLAY_BUTTON_COORDS"
+    # Activer la fenêtre Firefox d'abord
+    xdotool search --name "Firefox" windowactivate --sync 2>/dev/null || true
+    sleep 0.5
+    # Déplacer la souris et cliquer
+    xdotool mousemove --sync "$X" "$Y" click 1
+    log "Clic effectué aux coordonnées ($X, $Y)"
+    return 0
+  elif [ -n "$PLAY_BUTTON_SELECTOR" ]; then
+    # Utiliser un sélecteur CSS - injecter du JavaScript via la console Firefox
+    log "Recherche du bouton play avec le sélecteur CSS: $PLAY_BUTTON_SELECTOR"
+    
+    # Activer la fenêtre Firefox
+    xdotool search --name "Firefox" windowactivate --sync 2>/dev/null || true
+    sleep 0.5
+    
+    # Ouvrir la console développeur (F12) et exécuter le script
+    # Note: Cette méthode nécessite que la console soit accessible
+    log "Tentative d'injection JavaScript via la console..."
+    
+    # Alternative: utiliser xdotool pour simuler un clic sur les coordonnées du bouton
+    # Pour trouver les coordonnées, vous pouvez utiliser les outils de développement du navigateur
+    log "Avertissement: Les sélecteurs CSS nécessitent les coordonnées du bouton"
+    log "Pour une méthode plus fiable, utilisez PLAY_BUTTON_COORDS"
+    log "Pour trouver les coordonnées:"
+    log "  1. Ouvrez votre page dans un navigateur"
+    log "  2. Faites un clic droit sur le bouton play > Inspecter"
+    log "  3. Dans la console, exécutez:"
+    log "     const btn = document.querySelector('$PLAY_BUTTON_SELECTOR');"
+    log "     const rect = btn.getBoundingClientRect();"
+    log "     console.log(rect.left + rect.width/2, rect.top + rect.height/2);"
+    return 1
+  else
+    log "Aucun bouton play configuré, passage au stream"
+    return 0
+  fi
+}
+
+# Attendre un peu puis cliquer sur le bouton play si configuré
+if [ -n "$PLAY_BUTTON_COORDS" ] || [ -n "$PLAY_BUTTON_SELECTOR" ]; then
+  log "Attente de $PLAY_BUTTON_DELAY secondes pour que la page se charge complètement..."
+  sleep "$PLAY_BUTTON_DELAY"
+  
+  # Essayer plusieurs fois de cliquer (au cas où la page met du temps à charger)
+  CLICK_SUCCESS=false
+  for attempt in {1..5}; do
+    log "Tentative $attempt/5 de clic sur le bouton play..."
+    if click_play_button; then
+      log "✓ Clic sur le bouton play réussi"
+      CLICK_SUCCESS=true
+      sleep 3  # Attendre un peu après le clic pour que la musique démarre
+      break
+    else
+      if [ $attempt -lt 5 ]; then
+        log "Échec du clic, nouvelle tentative dans 3 secondes..."
+        sleep 3
+      else
+        log "⚠️  Impossible de cliquer sur le bouton play après 5 tentatives"
+        log "Le stream continuera sans activer la musique"
+      fi
+    fi
+  done
+  
+  if [ "$CLICK_SUCCESS" = "true" ]; then
+    log "Musique activée, démarrage du stream..."
+  fi
+fi
+
+log "Démarrage du stream..."
 
 # Fonction de surveillance de Firefox en arrière-plan
 monitor_firefox() {
