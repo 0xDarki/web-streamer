@@ -1,0 +1,6 @@
+commande_custom.txt
+build.sh
+deploy.sh
+setup-docker.sh
+configure-docker-dns.sh
+DEPLOY.md
