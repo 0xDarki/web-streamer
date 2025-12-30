@@ -21,6 +21,8 @@ PLAY_BUTTON_SELECTOR="${PLAY_BUTTON_SELECTOR:-}"
 PLAY_BUTTON_COORDS="${PLAY_BUTTON_COORDS:-}"
 # Délai avant de cliquer sur le bouton play (en secondes)
 PLAY_BUTTON_DELAY="${PLAY_BUTTON_DELAY:-5}"
+# Forcer l'utilisation de l'audio même si VirtualAudio n'est pas détecté
+FORCE_AUDIO="${FORCE_AUDIO:-false}"
 
 # Variables d'environnement pour Chromium
 export DISPLAY=:99
@@ -307,7 +309,19 @@ USE_AUDIO=false
 
 # Vérifier que PulseAudio est actif
 if ! pgrep -x pulseaudio >/dev/null; then
-  log "Avertissement: PulseAudio n'est pas actif, stream vidéo uniquement"
+  log "Avertissement: PulseAudio n'est pas actif"
+  if [ "$FORCE_AUDIO" = "true" ]; then
+    log "⚠️  FORCE_AUDIO activé: tentative de redémarrage de PulseAudio..."
+    pulseaudio --start --exit-idle-time=-1 --disallow-exit 2>/dev/null || \
+    pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit 2>/dev/null || true
+    sleep 2
+    # Recréer VirtualAudio si nécessaire
+    pactl load-module module-null-sink sink_name=VirtualAudio sink_properties=device.description="VirtualAudio" 2>/dev/null || true
+    pactl set-default-sink VirtualAudio 2>/dev/null || true
+    sleep 1
+  else
+    log "Stream vidéo uniquement (utilisez FORCE_AUDIO=true pour forcer l'audio)"
+  fi
 else
   # Vérifier que VirtualAudio existe
   if pactl list sinks short 2>/dev/null | grep -q "VirtualAudio"; then
@@ -321,15 +335,45 @@ else
         log "✓ Audio disponible, inclusion dans le stream"
       else
         log "Avertissement: Monitor VirtualAudio non accessible"
+        if [ "$FORCE_AUDIO" = "true" ]; then
+          log "⚠️  FORCE_AUDIO activé: utilisation de l'audio quand même"
+          USE_AUDIO=true
+        fi
       fi
     else
-      log "Avertissement: /dev/snd non disponible, stream vidéo uniquement"
+      log "Avertissement: /dev/snd non disponible"
+      if [ "$FORCE_AUDIO" = "true" ]; then
+        log "⚠️  FORCE_AUDIO activé: utilisation de l'audio quand même"
+        USE_AUDIO=true
+      fi
     fi
   else
     log "Avertissement: VirtualAudio non trouvé dans la liste des sinks"
     log "Liste des sinks disponibles:"
     pactl list sinks short 2>/dev/null | head -5 || log "Aucun sink disponible"
+    
+    if [ "$FORCE_AUDIO" = "true" ]; then
+      log "⚠️  FORCE_AUDIO activé: tentative de création de VirtualAudio..."
+      pactl load-module module-null-sink sink_name=VirtualAudio sink_properties=device.description="VirtualAudio" 2>/dev/null || true
+      pactl set-default-sink VirtualAudio 2>/dev/null || true
+      sleep 1
+      if pactl list sinks short 2>/dev/null | grep -q "VirtualAudio"; then
+        USE_AUDIO=true
+        log "✓ VirtualAudio créé avec FORCE_AUDIO, utilisation de l'audio"
+      else
+        log "⚠️  Impossible de créer VirtualAudio même avec FORCE_AUDIO"
+        USE_AUDIO=true  # Essayer quand même
+        log "⚠️  Tentative d'utilisation de l'audio sans VirtualAudio (peut échouer)"
+      fi
+    fi
   fi
+fi
+
+# Résumé final
+if [ "$USE_AUDIO" = "true" ]; then
+  log "✓ Stream avec audio activé"
+else
+  log "⚠️  Stream vidéo uniquement (pas d'audio)"
 fi
 
 # Construire et exécuter la commande FFmpeg
@@ -348,10 +392,33 @@ fi
 if [ "$USE_AUDIO" = "true" ]; then
   # Avec audio
   log "Démarrage FFmpeg avec audio..."
+  
+  # Essayer d'abord avec VirtualAudio.monitor
+  if pactl list sinks short 2>/dev/null | grep -q "VirtualAudio"; then
+    AUDIO_INPUT="VirtualAudio.monitor"
+    log "Utilisation de VirtualAudio.monitor pour l'audio"
+  else
+    # Si VirtualAudio n'existe pas mais FORCE_AUDIO est activé, essayer d'autres sources
+    if [ "$FORCE_AUDIO" = "true" ]; then
+      # Essayer de trouver un autre sink disponible
+      DEFAULT_SINK=$(pactl list sinks short 2>/dev/null | head -1 | awk '{print $2}')
+      if [ -n "$DEFAULT_SINK" ]; then
+        AUDIO_INPUT="${DEFAULT_SINK}.monitor"
+        log "⚠️  FORCE_AUDIO: utilisation de ${DEFAULT_SINK}.monitor"
+      else
+        # Dernière tentative: utiliser default
+        AUDIO_INPUT="default"
+        log "⚠️  FORCE_AUDIO: utilisation de 'default' comme source audio"
+      fi
+    else
+      AUDIO_INPUT="VirtualAudio.monitor"
+    fi
+  fi
+  
   ffmpeg -loglevel error -stats \
     -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0+0,0 \
     -probesize 20M -analyzeduration 20M \
-    -f pulse -i VirtualAudio.monitor -ac 2 \
+    -f pulse -i "$AUDIO_INPUT" -ac 2 \
     -c:v libx264 -preset ultrafast -tune zerolatency \
     -b:v 2500k -maxrate 2500k -bufsize 5000k \
     -pix_fmt yuv420p -g 60 -keyint_min 60 \

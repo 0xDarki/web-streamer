@@ -35,6 +35,7 @@ docker run -d --rm \
 - **`PLAY_BUTTON_COORDS`** : X,Y coordinates of the play button to click (format: `"x,y"`, e.g., `"960,540"`)
 - **`PLAY_BUTTON_SELECTOR`** : CSS selector of the play button (less reliable, prefer coordinates)
 - **`PLAY_BUTTON_DELAY`** : Delay in seconds before clicking the play button (default: `5`)
+- **`FORCE_AUDIO`** : Force audio capture even if VirtualAudio is not detected (default: `false`, set to `true` to enable)
 
 ## 📖 Usage Examples
 
@@ -62,7 +63,7 @@ docker run -d --rm \
   web-streamer
 ```
 
-### Example 3: Stream with automatic play button click
+### Example 3: Stream with automatic play button click and forced audio
 
 ```bash
 docker run -d --rm \
@@ -72,6 +73,7 @@ docker run -d --rm \
   -e RTMP_URL="rtmps://your-server.com/stream/key" \
   -e PLAY_BUTTON_COORDS="960,540" \
   -e PLAY_BUTTON_DELAY="5" \
+  -e FORCE_AUDIO="true" \
   web-streamer
 ```
 
@@ -266,6 +268,13 @@ sudo ./configure-docker-dns.sh
 1. Verify that the RTMP URL is correct and accessible
 2. Check the logs: `docker logs -f mon-stream`
 3. Test the RTMP connection with another tool (OBS, FFmpeg direct)
+
+### Audio not working
+
+1. Check logs for PulseAudio and VirtualAudio messages
+2. Try enabling `FORCE_AUDIO=true` to force audio capture
+3. Verify that audio is playing on the web page (check browser console)
+4. On Railway or cloud platforms, audio may not be available due to container limitations
 
 ## 📚 Project Structure
 

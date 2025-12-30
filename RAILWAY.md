@@ -50,6 +50,8 @@ This guide will help you deploy the Web Streamer to Railway using Docker.
    - `PLAY_BUTTON_COORDS`: X,Y coordinates of play button to click (format: `960,540`)
      - Use this if your page requires clicking a play button to start audio
    - `PLAY_BUTTON_DELAY`: Seconds to wait before clicking play button (default: `5`)
+   - `FORCE_AUDIO`: Force audio capture even if detection fails (set to `true` to enable)
+     - Useful on Railway or platforms where audio detection may fail
 
 3. Click **"Deploy"** to trigger a new deployment
 
