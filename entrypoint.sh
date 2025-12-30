@@ -44,19 +44,68 @@ fi
 log "Xvfb est actif"
 
 log "Démarrage de PulseAudio (pour le son)..."
-# PulseAudio en mode system pour éviter les warnings en root
-pulseaudio --system -D --exit-idle-time=-1 --disallow-exit 2>/dev/null || \
-pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit 2>/dev/null || true
-sleep 2
-# Créer un sink virtuel pour capturer l'audio du navigateur
-pactl load-module module-null-sink sink_name=VirtualAudio sink_properties=device.description="VirtualAudio" 2>/dev/null || true
-pactl set-default-sink VirtualAudio 2>/dev/null || true
-# Configurer les permissions pour permettre l'accès au monitor
-pactl set-sink-input-mute @DEFAULT_SINK@ false 2>/dev/null || true
-# Vérifier que le monitor est accessible
-if [ -e /dev/snd ]; then
-  chmod 666 /dev/snd/* 2>/dev/null || true
+# Nettoyer les anciennes instances de PulseAudio
+pkill -9 pulseaudio 2>/dev/null || true
+sleep 1
+
+# Créer le répertoire pour les sockets PulseAudio
+mkdir -p /tmp/pulse
+export PULSE_RUNTIME_PATH=/tmp/pulse
+export PULSE_STATE_PATH=/tmp/pulse
+
+# Démarrer PulseAudio en mode user (plus fiable que system)
+pulseaudio --start --exit-idle-time=-1 --disallow-exit 2>&1 | while IFS= read -r line; do
+  log "PulseAudio: $line"
+done || {
+  log "Tentative alternative de démarrage PulseAudio..."
+  pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit 2>&1 | while IFS= read -r line; do
+    log "PulseAudio: $line"
+  done || true
+}
+
+sleep 3
+
+# Vérifier que PulseAudio est actif
+if ! pgrep -x pulseaudio >/dev/null; then
+  log "Avertissement: PulseAudio n'a pas démarré, audio désactivé"
+else
+  log "PulseAudio est actif"
+  
+  # Désactiver le sink par défaut si nécessaire
+  pactl unload-module module-suspend-on-idle 2>/dev/null || true
+  
+  # Créer un sink virtuel pour capturer l'audio du navigateur
+  log "Création du sink virtuel VirtualAudio..."
+  if pactl load-module module-null-sink sink_name=VirtualAudio sink_properties=device.description="VirtualAudio" 2>/dev/null; then
+    log "✓ Sink VirtualAudio créé"
+    sleep 1
+    
+    # Définir VirtualAudio comme sink par défaut
+    if pactl set-default-sink VirtualAudio 2>/dev/null; then
+      log "✓ VirtualAudio défini comme sink par défaut"
+    else
+      log "Avertissement: Impossible de définir VirtualAudio comme défaut"
+    fi
+    
+    # Vérifier que le sink existe
+    if pactl list sinks short | grep -q VirtualAudio; then
+      log "✓ VirtualAudio vérifié et prêt"
+    else
+      log "Avertissement: VirtualAudio créé mais non détecté dans la liste"
+    fi
+  else
+    log "Avertissement: Impossible de créer VirtualAudio, audio désactivé"
+  fi
+  
+  # Configurer les permissions pour permettre l'accès au monitor
+  pactl set-sink-input-mute @DEFAULT_SINK@ false 2>/dev/null || true
+  
+  # Vérifier que le monitor est accessible
+  if [ -e /dev/snd ]; then
+    chmod 666 /dev/snd/* 2>/dev/null || true
+  fi
 fi
+
 sleep 1
 
 log "Lancement d'un gestionnaire de fenêtre simple..."
@@ -112,6 +161,10 @@ fi
 
 log "Utilisation de: $FIREFOX_CMD"
 $FIREFOX_CMD --version || log "Warning: Impossible de vérifier la version"
+
+# Configurer Firefox pour utiliser PulseAudio
+export PULSE_SERVER=unix:/tmp/pulse/native
+export PULSE_RUNTIME_PATH=/tmp/pulse
 
 # Options Firefox pour le mode headless/kiosk
 $FIREFOX_CMD \
@@ -251,16 +304,32 @@ set +e
 
 # Vérifier si l'audio est disponible
 USE_AUDIO=false
-if pactl list sinks 2>/dev/null | grep -q "VirtualAudio"; then
-  # Essayer d'utiliser l'audio
-  if [ -e /dev/snd ] || [ -d /dev/snd ]; then
-    USE_AUDIO=true
-    log "Audio disponible, inclusion dans le stream"
-  else
-    log "Avertissement: Audio non disponible, stream vidéo uniquement"
-  fi
+
+# Vérifier que PulseAudio est actif
+if ! pgrep -x pulseaudio >/dev/null; then
+  log "Avertissement: PulseAudio n'est pas actif, stream vidéo uniquement"
 else
-  log "Avertissement: VirtualAudio non trouvé, stream vidéo uniquement"
+  # Vérifier que VirtualAudio existe
+  if pactl list sinks short 2>/dev/null | grep -q "VirtualAudio"; then
+    log "VirtualAudio trouvé, vérification de l'accès au monitor..."
+    
+    # Vérifier que le monitor est accessible
+    if [ -e /dev/snd ] || [ -d /dev/snd ]; then
+      # Tester l'accès au monitor
+      if pactl list sinks | grep -A 10 "VirtualAudio" | grep -q "Monitor"; then
+        USE_AUDIO=true
+        log "✓ Audio disponible, inclusion dans le stream"
+      else
+        log "Avertissement: Monitor VirtualAudio non accessible"
+      fi
+    else
+      log "Avertissement: /dev/snd non disponible, stream vidéo uniquement"
+    fi
+  else
+    log "Avertissement: VirtualAudio non trouvé dans la liste des sinks"
+    log "Liste des sinks disponibles:"
+    pactl list sinks short 2>/dev/null | head -5 || log "Aucun sink disponible"
+  fi
 fi
 
 # Construire et exécuter la commande FFmpeg
