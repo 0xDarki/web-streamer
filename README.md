@@ -1,15 +1,15 @@
 # Web Streamer
 
-Un conteneur Docker pour streamer une page web vers un serveur RTMP/RTMPS en utilisant Firefox et FFmpeg.
+A Docker container to stream a web page to an RTMP/RTMPS server using Firefox and FFmpeg.
 
-## 🚀 Utilisation rapide
+## 🚀 Quick Start
 
-### Prérequis
+### Prerequisites
 
-- Docker installé et configuré
-- Une URL RTMP/RTMPS valide pour le streaming
+- Docker installed and configured
+- A valid RTMP/RTMPS URL for streaming
 
-### Commande de base
+### Basic Command
 
 ```bash
 docker run -d --rm \
@@ -20,22 +20,22 @@ docker run -d --rm \
   web-streamer
 ```
 
-## 📋 Variables d'environnement
+## 📋 Environment Variables
 
-### Obligatoires
+### Required
 
-- **`RTMP_URL`** : URL complète du serveur RTMP/RTMPS (ex: `rtmps://live-api-s.facebook.com:443/rtmp/CLE_STREAM`)
-  - ⚠️ **Cette variable est obligatoire**, le conteneur s'arrêtera si elle n'est pas définie
+- **`RTMP_URL`** : Complete RTMP/RTMPS server URL (e.g., `rtmps://live-api-s.facebook.com:443/rtmp/CLE_STREAM`)
+  - ⚠️ **This variable is required**, the container will stop if it's not defined
 
-### Optionnelles
+### Optional
 
-- **`TARGET_URL`** : URL de la page web à streamer (défaut: `https://www.google.com`)
-- **`RESOLUTION`** : Résolution de la capture vidéo (défaut: `1920x1080`)
-- **`FRAMERATE`** : Fréquence d'images par seconde (défaut: `10`)
+- **`TARGET_URL`** : URL of the web page to stream (default: `https://www.google.com`)
+- **`RESOLUTION`** : Video capture resolution (default: `1920x1080`)
+- **`FRAMERATE`** : Frames per second (default: `10`)
 
-## 📖 Exemples d'utilisation
+## 📖 Usage Examples
 
-### Exemple 1 : Streamer une page web personnalisée
+### Example 1: Stream a custom web page
 
 ```bash
 docker run -d --rm \
@@ -46,7 +46,7 @@ docker run -d --rm \
   web-streamer
 ```
 
-### Exemple 2 : Streamer avec résolution personnalisée
+### Example 2: Stream with custom resolution
 
 ```bash
 docker run -d --rm \
@@ -59,7 +59,7 @@ docker run -d --rm \
   web-streamer
 ```
 
-### Exemple 3 : Streamer en mode interactif (pour debug)
+### Example 3: Stream in interactive mode (for debugging)
 
 ```bash
 docker run -it --rm \
@@ -70,112 +70,112 @@ docker run -it --rm \
   web-streamer
 ```
 
-## 🔍 Vérification et logs
+## 🔍 Monitoring and Logs
 
-### Voir les logs du conteneur
+### View container logs
 
 ```bash
 docker logs -f mon-stream
 ```
 
-### Vérifier que le conteneur tourne
+### Check if container is running
 
 ```bash
 docker ps | grep web-streamer
 ```
 
-### Arrêter le stream
+### Stop the stream
 
 ```bash
 docker stop mon-stream
 ```
 
-## 🛠️ Construction de l'image
+## 🛠️ Building the Image
 
-### Sur votre machine locale
+### On your local machine
 
 ```bash
-# Cloner ou télécharger le projet
+# Clone or download the project
 cd web-streamer
 
-# Construire l'image
+# Build the image
 docker build -t web-streamer .
 ```
 
-### Sur une VM (avec configuration DNS)
+### On a VM (with DNS configuration)
 
-Voir [DEPLOY.md](./DEPLOY.md) pour les instructions complètes de déploiement.
+See [DEPLOY.md](./DEPLOY.md) for complete deployment instructions.
 
-**Résumé rapide :**
+**Quick summary:**
 
-1. Configurer le DNS Docker (une seule fois) :
+1. Configure Docker DNS (one time only):
    ```bash
    sudo ./configure-docker-dns.sh
    ```
 
-2. Construire l'image :
+2. Build the image:
    ```bash
    ./build.sh
    ```
 
-## 📝 Notes importantes
+## 📝 Important Notes
 
-- **Shared Memory** : Le conteneur nécessite au moins 2GB de shared memory (`--shm-size=2gb`) pour Firefox
-- **Résolution** : La résolution par défaut est 1920x1080, vous pouvez la modifier avec `RESOLUTION`
-- **Framerate** : Le framerate par défaut est 10 fps pour économiser la bande passante
-- **Audio** : L'audio est capturé si disponible, sinon le stream sera vidéo uniquement
-- **RTMP_URL** : Doit être une URL RTMP ou RTMPS valide et complète
+- **Shared Memory**: The container requires at least 2GB of shared memory (`--shm-size=2gb`) for Firefox
+- **Resolution**: Default resolution is 1920x1080, you can modify it with `RESOLUTION`
+- **Framerate**: Default framerate is 10 fps to save bandwidth
+- **Audio**: Audio is captured if available, otherwise the stream will be video only
+- **RTMP_URL**: Must be a valid and complete RTMP or RTMPS URL
 
-## 🐛 Dépannage
+## 🐛 Troubleshooting
 
-### Le conteneur s'arrête immédiatement
+### Container stops immediately
 
-Vérifiez les logs :
+Check the logs:
 ```bash
 docker logs mon-stream
 ```
 
-Causes communes :
-- `RTMP_URL` non défini ou invalide
-- Problème de connexion réseau
-- Serveur RTMP inaccessible
+Common causes:
+- `RTMP_URL` undefined or invalid
+- Network connection issue
+- RTMP server unreachable
 
-### Firefox ne démarre pas
+### Firefox doesn't start
 
-Vérifiez que le shared memory est suffisant :
+Verify that shared memory is sufficient:
 ```bash
 docker run --shm-size=2gb ...
 ```
 
-### Problèmes de résolution DNS
+### DNS resolution issues
 
-Sur une VM, configurez le DNS Docker :
+On a VM, configure Docker DNS:
 ```bash
 sudo ./configure-docker-dns.sh
 ```
 
-### Le stream ne fonctionne pas
+### Stream doesn't work
 
-1. Vérifiez que l'URL RTMP est correcte et accessible
-2. Vérifiez les logs : `docker logs -f mon-stream`
-3. Testez la connexion RTMP avec un autre outil (OBS, FFmpeg direct)
+1. Verify that the RTMP URL is correct and accessible
+2. Check the logs: `docker logs -f mon-stream`
+3. Test the RTMP connection with another tool (OBS, FFmpeg direct)
 
-## 📚 Structure du projet
+## 📚 Project Structure
 
-- `Dockerfile` : Définition de l'image Docker
-- `entrypoint.sh` : Script de démarrage du conteneur
-- `build.sh` : Script pour construire l'image
-- `deploy.sh` : Script pour déployer sur une VM
-- `configure-docker-dns.sh` : Configuration DNS Docker
-- `commande_custom.txt` : Exemple de commande Docker
+- `Dockerfile`: Docker image definition
+- `entrypoint.sh`: Container startup script
+- `build.sh`: Script to build the image
+- `deploy.sh`: Script to deploy on a VM
+- `configure-docker-dns.sh`: Docker DNS configuration
+- `commande_custom.txt`: Docker command example
 
-## 🔗 Liens utiles
+## 🔗 Useful Links
 
-- [Documentation FFmpeg](https://ffmpeg.org/documentation.html)
-- [Documentation Docker](https://docs.docker.com/)
-- [Format RTMP](https://en.wikipedia.org/wiki/Real-Time_Messaging_Protocol)
+- [FFmpeg Documentation](https://ffmpeg.org/documentation.html)
+- [Docker Documentation](https://docs.docker.com/)
+- [RTMP Format](https://en.wikipedia.org/wiki/Real-Time_Messaging_Protocol)
 
-## 📄 Licence
+## 📄 License
 
-Ce projet est fourni tel quel, sans garantie.
+This project is provided as-is, without warranty.
 
