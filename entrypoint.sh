@@ -10,7 +10,7 @@ log() {
 
 # Configuration
 RESOLUTION="1920x1080"
-FRAMERATE="5"
+FRAMERATE="10"
 # URL de la page à streamer
 TARGET_URL="${TARGET_URL:-https://www.google.com}"
 # URL RTMPS (ex: rtmps://live-api-s.facebook.com:443/rtmp/CLE_STREAM)
@@ -24,6 +24,8 @@ export PATH=$PATH:/snap/bin
 # Firefox ne nécessite pas snapd, on peut ignorer cette partie
 
 log "Démarrage de Xvfb..."
+# Nettoyer les anciens locks X11 si présents
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
 Xvfb :99 -ac -screen 0 ${RESOLUTION}x24 +extension RANDR &
 XVFB_PID=$!
 sleep 3
@@ -74,11 +76,14 @@ log "Préparation du profil Firefox..."
 mkdir -p /tmp/firefox-profile
 chmod 777 /tmp/firefox-profile
 
-# Vérifier que RTMP_URL est défini
+# Vérifier que RTMP_URL est défini et nettoyer les guillemets
 if [ -z "$RTMP_URL" ]; then
   log "ERREUR: RTMP_URL n'est pas défini!"
   exit 1
 fi
+
+# Nettoyer les guillemets autour de RTMP_URL si présents
+RTMP_URL=$(echo "$RTMP_URL" | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//")
 
 log "Lancement de Firefox vers: $TARGET_URL"
 
@@ -178,11 +183,24 @@ else
 fi
 
 # Construire et exécuter la commande FFmpeg
+# Vérifier que X11 est accessible avant de commencer
+if ! xdpyinfo -display :99 >/dev/null 2>&1; then
+  log "ERREUR: X11 n'est pas accessible pour FFmpeg!"
+  exit 1
+fi
+
+log "Vérification de la connexion RTMP..."
+# Tester la connexion RTMP (timeout de 5 secondes)
+if ! timeout 5 bash -c "echo > /dev/tcp/$(echo $RTMP_URL | sed -E 's|^rtmps?://([^:/]+).*|\1|')/443" 2>/dev/null; then
+  log "Avertissement: Impossible de tester la connexion RTMP, continuation..."
+fi
+
 if [ "$USE_AUDIO" = "true" ]; then
   # Avec audio
-  ffmpeg -loglevel warning -stats \
-    -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0 \
-    -probesize 10M -analyzeduration 10M \
+  log "Démarrage FFmpeg avec audio..."
+  ffmpeg -loglevel error -stats \
+    -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0+0,0 \
+    -probesize 20M -analyzeduration 20M \
     -f pulse -i VirtualAudio.monitor -ac 2 \
     -c:v libx264 -preset ultrafast -tune zerolatency \
     -b:v 2500k -maxrate 2500k -bufsize 5000k \
@@ -195,9 +213,10 @@ if [ "$USE_AUDIO" = "true" ]; then
     -f flv "$RTMP_URL"
 else
   # Sans audio (vidéo uniquement)
-  ffmpeg -loglevel warning -stats \
-    -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0 \
-    -probesize 10M -analyzeduration 10M \
+  log "Démarrage FFmpeg sans audio..."
+  ffmpeg -loglevel error -stats \
+    -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0+0,0 \
+    -probesize 20M -analyzeduration 20M \
     -c:v libx264 -preset ultrafast -tune zerolatency \
     -b:v 2500k -maxrate 2500k -bufsize 5000k \
     -pix_fmt yuv420p -g 60 -keyint_min 60 \
@@ -208,12 +227,21 @@ else
     -f flv "$RTMP_URL"
 fi
 
-FFMPEG_EXIT=$?
+# Capturer le code de sortie de FFmpeg (en tenant compte du pipe)
+FFMPEG_EXIT=${PIPESTATUS[0]}
 set -e
 
 if [ $FFMPEG_EXIT -ne 0 ]; then
   log "FFmpeg a échoué avec le code de sortie: $FFMPEG_EXIT"
+  log "Vérification de l'URL RTMP: $RTMP_URL"
+  log "Vérification de X11..."
+  xdpyinfo -display :99 >/dev/null 2>&1 && log "X11 est accessible" || log "X11 n'est pas accessible"
+  log "Nettoyage des processus..."
   kill $MONITOR_PID 2>/dev/null || true
+  kill $FIREFOX_PID 2>/dev/null || true
+  kill $XVFB_PID 2>/dev/null || true
+  pkill -f ffmpeg 2>/dev/null || true
+  log "Arrêt du conteneur"
   exit 1
 fi
 

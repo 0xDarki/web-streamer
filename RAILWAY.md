@@ -40,13 +40,19 @@ This guide will help you deploy the Web Streamer to Railway using Docker.
      ```
      rtmps://pump-prod-tg2x8veh.rtmp.livekit.cloud/x/gb292QFSLYsp
      ```
+     ⚠️ **Important**: Do NOT add quotes around the URL in Railway's variable settings. Just paste the URL directly.
 
    **Optional:**
    - `TARGET_URL`: URL of the web page to stream (default: `https://www.google.com`)
+     - No quotes needed here either
    - `RESOLUTION`: Video resolution (default: `1920x1080`)
    - `FRAMERATE`: Frames per second (default: `10`)
 
 3. Click **"Deploy"** to trigger a new deployment
+
+**Example of correct variable values in Railway:**
+- `RTMP_URL` = `rtmps://pump-prod-tg2x8veh.rtmp.livekit.cloud/x/gb292QFSLYsp` ✅
+- `RTMP_URL` = `"rtmps://..."` ❌ (Don't add quotes)
 
 ### Step 4: Configure Shared Memory (Important)
 
@@ -202,6 +208,7 @@ Or simply push to GitHub if connected, and Railway will auto-deploy.
 2. Check Railway logs for FFmpeg errors
 3. Test RTMP URL with another tool (OBS, FFmpeg)
 4. Ensure RTMP server accepts connections from Railway's IPs
+5. **Check for quotes in RTMP_URL**: If you see errors like `"rtmps://...: No such file or directory`, it means there are quotes around your RTMP_URL. Remove them in Railway's variable settings.
 
 ## 💰 Railway Pricing
 
