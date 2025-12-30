@@ -10,7 +10,7 @@ log() {
 
 # Configuration
 RESOLUTION="1920x1080"
-FRAMERATE="10"
+FRAMERATE="5"
 # URL de la page à streamer
 TARGET_URL="${TARGET_URL:-https://www.google.com}"
 # URL RTMPS (ex: rtmps://live-api-s.facebook.com:443/rtmp/CLE_STREAM)

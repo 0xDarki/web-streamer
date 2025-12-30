@@ -118,6 +118,17 @@ See [DEPLOY.md](./DEPLOY.md) for complete deployment instructions.
    ./build.sh
    ```
 
+### Deploy to Railway (Cloud)
+
+See [RAILWAY.md](./RAILWAY.md) for complete Railway deployment instructions.
+
+**Quick summary:**
+
+1. Push your code to GitHub
+2. Connect repository to Railway
+3. Set environment variables (`RTMP_URL`, `TARGET_URL`, etc.)
+4. Deploy!
+
 ## 📝 Important Notes
 
 - **Shared Memory**: The container requires at least 2GB of shared memory (`--shm-size=2gb`) for Firefox
@@ -168,6 +179,8 @@ sudo ./configure-docker-dns.sh
 - `deploy.sh`: Script to deploy on a VM
 - `configure-docker-dns.sh`: Docker DNS configuration
 - `commande_custom.txt`: Docker command example
+- `railway.json` / `railway.toml`: Railway deployment configuration
+- `RAILWAY.md`: Railway deployment guide
 
 ## 🔗 Useful Links
 
