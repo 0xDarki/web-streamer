@@ -52,26 +52,43 @@ sleep 1
 
 # Créer le répertoire pour les sockets PulseAudio
 mkdir -p /tmp/pulse
+chmod 755 /tmp/pulse
 export PULSE_RUNTIME_PATH=/tmp/pulse
 export PULSE_STATE_PATH=/tmp/pulse
+export PULSE_SERVER=unix:/tmp/pulse/native
 
-# Démarrer PulseAudio en mode user (plus fiable que system)
-pulseaudio --start --exit-idle-time=-1 --disallow-exit 2>&1 | while IFS= read -r line; do
-  log "PulseAudio: $line"
-done || {
-  log "Tentative alternative de démarrage PulseAudio..."
-  pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit 2>&1 | while IFS= read -r line; do
+# Vérifier si on est root
+if [ "$(id -u)" = "0" ]; then
+  log "Exécution en root, démarrage de PulseAudio avec --fail=false..."
+  # En root, utiliser --fail=false pour permettre le démarrage malgré l'avertissement
+  pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit --fail=false 2>&1 | while IFS= read -r line; do
     log "PulseAudio: $line"
-  done || true
-}
+  done || {
+    log "Tentative alternative: PulseAudio avec --start..."
+    pulseaudio --start --exit-idle-time=-1 --disallow-exit --fail=false 2>&1 | while IFS= read -r line; do
+      log "PulseAudio: $line"
+    done || true
+  }
+else
+  # Pas root, démarrage normal
+  log "Démarrage de PulseAudio en mode user..."
+  pulseaudio --start --exit-idle-time=-1 --disallow-exit 2>&1 | while IFS= read -r line; do
+    log "PulseAudio: $line"
+  done || {
+    pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit 2>&1 | while IFS= read -r line; do
+      log "PulseAudio: $line"
+    done || true
+  }
+fi
 
 sleep 3
 
 # Vérifier que PulseAudio est actif
 if ! pgrep -x pulseaudio >/dev/null; then
   log "Avertissement: PulseAudio n'a pas démarré, audio désactivé"
+  log "Tentative de démarrage avec FORCE_AUDIO si activé..."
 else
-  log "PulseAudio est actif"
+  log "✓ PulseAudio est actif (PID: $(pgrep -x pulseaudio))"
   
   # Désactiver le sink par défaut si nécessaire
   pactl unload-module module-suspend-on-idle 2>/dev/null || true
@@ -312,13 +329,31 @@ if ! pgrep -x pulseaudio >/dev/null; then
   log "Avertissement: PulseAudio n'est pas actif"
   if [ "$FORCE_AUDIO" = "true" ]; then
     log "⚠️  FORCE_AUDIO activé: tentative de redémarrage de PulseAudio..."
-    pulseaudio --start --exit-idle-time=-1 --disallow-exit 2>/dev/null || \
-    pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit 2>/dev/null || true
-    sleep 2
+    
+    # Utiliser --fail=false pour forcer le démarrage même en root
+    if [ "$(id -u)" = "0" ]; then
+      pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit --fail=false 2>/dev/null || \
+      pulseaudio --start --exit-idle-time=-1 --disallow-exit --fail=false 2>/dev/null || true
+    else
+      pulseaudio --start --exit-idle-time=-1 --disallow-exit 2>/dev/null || \
+      pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit 2>/dev/null || true
+    fi
+    
+    sleep 3
+    
+    # Vérifier à nouveau
+    if pgrep -x pulseaudio >/dev/null; then
+      log "✓ PulseAudio redémarré avec succès"
+    else
+      log "⚠️  Impossible de redémarrer PulseAudio même avec FORCE_AUDIO"
+    fi
+    
     # Recréer VirtualAudio si nécessaire
-    pactl load-module module-null-sink sink_name=VirtualAudio sink_properties=device.description="VirtualAudio" 2>/dev/null || true
-    pactl set-default-sink VirtualAudio 2>/dev/null || true
-    sleep 1
+    if pgrep -x pulseaudio >/dev/null; then
+      pactl load-module module-null-sink sink_name=VirtualAudio sink_properties=device.description="VirtualAudio" 2>/dev/null || true
+      pactl set-default-sink VirtualAudio 2>/dev/null || true
+      sleep 1
+    fi
   else
     log "Stream vidéo uniquement (utilisez FORCE_AUDIO=true pour forcer l'audio)"
   fi

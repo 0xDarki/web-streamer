@@ -12,6 +12,7 @@ RUN apt-get update --fix-missing || apt-get update && \
     xdotool \
     ffmpeg \
     pulseaudio \
+    pulseaudio-utils \
     socat \
     curl \
     wget \
