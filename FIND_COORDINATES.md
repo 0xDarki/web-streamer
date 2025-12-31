@@ -270,3 +270,4 @@ Dans Railway, ajoutez la variable d'environnement :
 **Le bouton est cliqué trop tôt :**
 - Augmentez `PLAY_BUTTON_DELAY` (par exemple, `10` secondes au lieu de `5`)
 
+

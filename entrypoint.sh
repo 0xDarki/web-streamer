@@ -23,6 +23,10 @@ PLAY_BUTTON_COORDS="${PLAY_BUTTON_COORDS:-}"
 PLAY_BUTTON_DELAY="${PLAY_BUTTON_DELAY:-5}"
 # Forcer l'utilisation de l'audio même si VirtualAudio n'est pas détecté
 FORCE_AUDIO="${FORCE_AUDIO:-false}"
+# Nombre maximum de tentatives de reconnexion en cas d'échec RTMPS
+MAX_RETRIES="${MAX_RETRIES:-5}"
+# Délai en secondes entre les tentatives de reconnexion
+RETRY_DELAY="${RETRY_DELAY:-10}"
 
 # Variables d'environnement pour Chromium
 export DISPLAY=:99
@@ -420,10 +424,17 @@ fi
 
 log "Vérification de la connexion RTMP..."
 # Tester la connexion RTMP (timeout de 5 secondes)
-if ! timeout 5 bash -c "echo > /dev/tcp/$(echo $RTMP_URL | sed -E 's|^rtmps?://([^:/]+).*|\1|')/443" 2>/dev/null; then
+RTMP_HOST=$(echo $RTMP_URL | sed -E 's|^rtmps?://([^:/]+).*|\1|')
+if ! timeout 5 bash -c "echo > /dev/tcp/$RTMP_HOST/443" 2>/dev/null; then
   log "Avertissement: Impossible de tester la connexion RTMP, continuation..."
 fi
 
+# Configuration de reconnexion
+MAX_RETRIES=${MAX_RETRIES:-5}
+RETRY_DELAY=${RETRY_DELAY:-10}
+RETRY_COUNT=0
+
+# Préparer les paramètres audio si nécessaire
 if [ "$USE_AUDIO" = "true" ]; then
   # Avec audio
   log "Démarrage FFmpeg avec audio..."
@@ -449,42 +460,111 @@ if [ "$USE_AUDIO" = "true" ]; then
       AUDIO_INPUT="VirtualAudio.monitor"
     fi
   fi
-  
-  ffmpeg -loglevel error -stats \
-    -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0+0,0 \
-    -probesize 20M -analyzeduration 20M \
-    -f pulse -i "$AUDIO_INPUT" -ac 2 \
-    -c:v libx264 -preset ultrafast -tune zerolatency \
-    -b:v 2500k -maxrate 2500k -bufsize 5000k \
-    -pix_fmt yuv420p -g 60 -keyint_min 60 \
-    -threads 0 -x264-params "threads=auto" \
-    -c:a aac -b:a 128k -ar 44100 -ac 2 \
-    -af "aresample=async=1" \
-    -fflags +genpts \
-    -flags +global_header \
-    -f flv "$RTMP_URL"
 else
-  # Sans audio (vidéo uniquement)
-  log "Démarrage FFmpeg sans audio..."
-  ffmpeg -loglevel error -stats \
-    -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0+0,0 \
-    -probesize 20M -analyzeduration 20M \
-    -c:v libx264 -preset ultrafast -tune zerolatency \
-    -b:v 2500k -maxrate 2500k -bufsize 5000k \
-    -pix_fmt yuv420p -g 60 -keyint_min 60 \
-    -threads 0 -x264-params "threads=auto" \
-    -an \
-    -fflags +genpts \
-    -flags +global_header \
-    -f flv "$RTMP_URL"
+  AUDIO_INPUT=""
 fi
 
-# Capturer le code de sortie de FFmpeg (en tenant compte du pipe)
-FFMPEG_EXIT=${PIPESTATUS[0]}
+# Boucle de reconnexion
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if [ $RETRY_COUNT -gt 0 ]; then
+    log "Tentative de reconnexion $RETRY_COUNT/$MAX_RETRIES dans $RETRY_DELAY secondes..."
+    sleep $RETRY_DELAY
+    
+    # Vérifier que Firefox est toujours actif
+    if ! check_firefox; then
+      log "ERREUR: Firefox s'est arrêté pendant la reconnexion!"
+      exit 1
+    fi
+    
+    # Vérifier que X11 est toujours accessible
+    if ! xdpyinfo -display :99 >/dev/null 2>&1; then
+      log "ERREUR: X11 n'est plus accessible!"
+      exit 1
+    fi
+  fi
+  
+  log "Démarrage du stream FFmpeg (tentative $((RETRY_COUNT + 1))/$MAX_RETRIES)..."
+  
+  # Construire et exécuter la commande FFmpeg
+  if [ "$USE_AUDIO" = "true" ]; then
+    ffmpeg -loglevel warning -stats \
+      -rtmp_live live \
+      -rtmp_conn "O:1" \
+      -reconnect 1 \
+      -reconnect_at_eof 1 \
+      -reconnect_streamed 1 \
+      -reconnect_delay_max 2 \
+      -timeout 5000000 \
+      -rw_timeout 5000000 \
+      -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0+0,0 \
+      -probesize 20M -analyzeduration 20M \
+      -f pulse -i "$AUDIO_INPUT" -ac 2 \
+      -c:v libx264 -preset ultrafast -tune zerolatency \
+      -b:v 2500k -maxrate 2500k -bufsize 5000k \
+      -pix_fmt yuv420p -g 60 -keyint_min 60 \
+      -threads 0 -x264-params "threads=auto" \
+      -c:a aac -b:a 128k -ar 44100 -ac 2 \
+      -af "aresample=async=1" \
+      -fflags +genpts \
+      -flags +global_header \
+      -f flv "$RTMP_URL" 2>&1 | tee /tmp/ffmpeg.log
+  else
+    # Sans audio (vidéo uniquement)
+    log "Démarrage FFmpeg sans audio..."
+    ffmpeg -loglevel warning -stats \
+      -rtmp_live live \
+      -rtmp_conn "O:1" \
+      -reconnect 1 \
+      -reconnect_at_eof 1 \
+      -reconnect_streamed 1 \
+      -reconnect_delay_max 2 \
+      -timeout 5000000 \
+      -rw_timeout 5000000 \
+      -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0+0,0 \
+      -probesize 20M -analyzeduration 20M \
+      -c:v libx264 -preset ultrafast -tune zerolatency \
+      -b:v 2500k -maxrate 2500k -bufsize 5000k \
+      -pix_fmt yuv420p -g 60 -keyint_min 60 \
+      -threads 0 -x264-params "threads=auto" \
+      -an \
+      -fflags +genpts \
+      -flags +global_header \
+      -f flv "$RTMP_URL" 2>&1 | tee /tmp/ffmpeg.log
+  fi
+  
+  # Capturer le code de sortie de FFmpeg
+  FFMPEG_EXIT=${PIPESTATUS[0]}
+  
+  # Analyser le type d'erreur
+  if [ $FFMPEG_EXIT -eq 0 ]; then
+    log "Stream terminé normalement"
+    break
+  else
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    
+    # Analyser les logs pour déterminer le type d'erreur
+    if grep -qi "end of file\|session.*invalidated\|connection.*refused\|timeout" /tmp/ffmpeg.log 2>/dev/null; then
+      log "Erreur de connexion RTMPS détectée (code: $FFMPEG_EXIT)"
+      if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+        log "Tentative de reconnexion..."
+        continue
+      else
+        log "Nombre maximum de tentatives atteint ($MAX_RETRIES)"
+      fi
+    else
+      log "Erreur FFmpeg non liée à la connexion (code: $FFMPEG_EXIT)"
+      # Pour les erreurs non liées à la connexion, ne pas réessayer
+      break
+    fi
+  fi
+done
+
 set -e
 
 if [ $FFMPEG_EXIT -ne 0 ]; then
-  log "FFmpeg a échoué avec le code de sortie: $FFMPEG_EXIT"
+  log "FFmpeg a échoué avec le code de sortie: $FFMPEG_EXIT après $RETRY_COUNT tentatives"
+  log "Dernières lignes du log FFmpeg:"
+  tail -30 /tmp/ffmpeg.log 2>/dev/null || true
   log "Vérification de l'URL RTMP: $RTMP_URL"
   log "Vérification de X11..."
   xdpyinfo -display :99 >/dev/null 2>&1 && log "X11 est accessible" || log "X11 n'est pas accessible"

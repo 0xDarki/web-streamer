@@ -36,6 +36,8 @@ docker run -d --rm \
 - **`PLAY_BUTTON_SELECTOR`** : CSS selector of the play button (less reliable, prefer coordinates)
 - **`PLAY_BUTTON_DELAY`** : Delay in seconds before clicking the play button (default: `5`)
 - **`FORCE_AUDIO`** : Force audio capture even if VirtualAudio is not detected (default: `false`, set to `true` to enable)
+- **`MAX_RETRIES`** : Maximum number of reconnection attempts when RTMPS connection fails (default: `5`)
+- **`RETRY_DELAY`** : Delay in seconds between reconnection attempts (default: `10`)
 
 ## 📖 Usage Examples
 
@@ -268,6 +270,15 @@ sudo ./configure-docker-dns.sh
 1. Verify that the RTMP URL is correct and accessible
 2. Check the logs: `docker logs -f mon-stream`
 3. Test the RTMP connection with another tool (OBS, FFmpeg direct)
+
+### RTMPS connection errors (End of file, session invalidated)
+
+If you see errors like "End of file" or "The specified session has been invalidated":
+1. The script now automatically retries connections (up to 5 times by default)
+2. You can adjust retry behavior with `MAX_RETRIES` and `RETRY_DELAY` environment variables
+3. Check if the RTMP URL/stream key is still valid (some services expire keys)
+4. Verify network connectivity to the RTMPS server
+5. The script includes improved RTMPS parameters for better stability
 
 ### Audio not working
 
