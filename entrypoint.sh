@@ -486,16 +486,9 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
   log "Démarrage du stream FFmpeg (tentative $((RETRY_COUNT + 1))/$MAX_RETRIES)..."
   
   # Construire et exécuter la commande FFmpeg
+  # Note: Les options de reconnexion sont gérées au niveau du script, pas dans FFmpeg
   if [ "$USE_AUDIO" = "true" ]; then
     ffmpeg -loglevel warning -stats \
-      -rtmp_live live \
-      -rtmp_conn "O:1" \
-      -reconnect 1 \
-      -reconnect_at_eof 1 \
-      -reconnect_streamed 1 \
-      -reconnect_delay_max 2 \
-      -timeout 5000000 \
-      -rw_timeout 5000000 \
       -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0+0,0 \
       -probesize 20M -analyzeduration 20M \
       -f pulse -i "$AUDIO_INPUT" -ac 2 \
@@ -512,14 +505,6 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # Sans audio (vidéo uniquement)
     log "Démarrage FFmpeg sans audio..."
     ffmpeg -loglevel warning -stats \
-      -rtmp_live live \
-      -rtmp_conn "O:1" \
-      -reconnect 1 \
-      -reconnect_at_eof 1 \
-      -reconnect_streamed 1 \
-      -reconnect_delay_max 2 \
-      -timeout 5000000 \
-      -rw_timeout 5000000 \
       -f x11grab -video_size $RESOLUTION -framerate $FRAMERATE -i :99.0+0,0 \
       -probesize 20M -analyzeduration 20M \
       -c:v libx264 -preset ultrafast -tune zerolatency \
